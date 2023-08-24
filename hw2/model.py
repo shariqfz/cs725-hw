@@ -50,8 +50,10 @@ class LitGenericClassifier(pl.LightningModule):
         gradient and update weights by calling `optim.step()`. You just need to return the `loss`
         appropriately. We log these values every step so that it is easier to compare various runs.
         """
-        loss = ...
-        acc = ...
+        x, y = batch
+        y_hat = self.model(x)
+        loss = self.loss_func(y_hat, y)
+        acc = (y_hat.argmax(dim=1) == y).float().mean()
         self.log('train_loss', loss.item())
         self.log('train_acc', acc)
         return loss
@@ -81,8 +83,12 @@ class LitGenericClassifier(pl.LightningModule):
           These values will be useful for you to assess overfitting and help you determine which model
         to submit on the leaderboard and in the final submission.
         """
-        loss = ...
-        acc = ...
+        x, y = batch
+        y_hat = self.model(x)
+        loss = self.loss_func(y_hat, y)
+        loss = torch.tensor(loss)
+        acc = (y_hat.argmax(dim=1) == y).float().mean()
+        acc = torch.tensor(acc)
         self.log('valid_loss', loss)
         self.log('valid_acc', acc)
         return {
@@ -116,8 +122,12 @@ class LitGenericClassifier(pl.LightningModule):
         evaluating your model. You can simply copy over the code from `validation_step` into this if 
         you wish. Just ensure that this calculation is correct.
         """
-        loss = ...
-        acc = ...
+        x, y = batch
+        y_hat = self.model(x)
+        loss = self.loss_func(y_hat, y)
+        loss = torch.tensor(loss)
+        acc = (y_hat.argmax(dim=1) == y).float().mean()
+        acc = torch.tensor(acc)
         self.log('test_loss', loss)
         self.log('test_acc', acc)
         return {
@@ -143,35 +153,42 @@ class LitGenericClassifier(pl.LightningModule):
         `y_pred`: `torch.LongTensor` of size (B,) such that `y_pred[i]` for 0 <= i < B is the label
         predicted by the classifier for `x[i]`
         """
-        y_pred = ...
+        x = self.transform_input((x, torch.zeros(x.size(0)).long()))
+        y_pred = nn.functional.softmax(self.model(x), dim=1).argmax(dim=1)
         return y_pred
 
 class LitSimpleClassifier(LitGenericClassifier):
     def __init__(self, lr=0):
         super().__init__(lr=lr)
         self.model = nn.Sequential(
-            nn.Linear(2, ...), # d = 2
-            ..., # build your model here using `torch.nn.*` modules
-            nn.Linear(..., 4)  # num_classes = 4
+            nn.Linear(2, 16), # d = 2
+            nn.ReLU(),
+            nn.Linear(16, 16), # build your model here using `torch.nn.*` modules
+            nn.ReLU(),
+            nn.Linear(16, 4)  # num_classes = 4
         )
 
     def transform_input(self, batch):
         # hardcode your transform here
+        # batch = torch.tensor(batch)
+        # batch = (batch - batch.mean(dim=0)) / batch.std(dim=0)
         return batch
 
     def configure_optimizers(self):
         # choose an optimizer from `torch.optim.*`
         # use `self.lr` to set the learning rate
         # other parameters (e.g. momentum) may be hardcoded here
-        return torch.optim.<optim_name>(...)
+        return torch.optim.SGD(self.model.parameters(), lr=self.lr)
 
 class LitDigitsClassifier(LitGenericClassifier):
     def __init__(self, lr=0):
         super().__init__(lr=lr)
         self.model = nn.Sequential(
-            nn.Linear(64, ...), # d = 64
-            ..., # build your model here using `torch.nn.*` modules
-            nn.Linear(.., 10)   # num_classes = 10
+            nn.Linear(64, 64*4), # d = 64
+            nn.ReLU(), # build your model here using `torch.nn.*` modules
+            nn.Linear(64*4, 64*4),
+            nn.ReLU(),
+            nn.Linear(64*4, 10)   # num_classes = 10
         )
     
     def transform_input(self, batch):
@@ -182,4 +199,4 @@ class LitDigitsClassifier(LitGenericClassifier):
         # choose an optimizer from `torch.optim.*`
         # use `self.lr` to set the learning rate
         # other parameters (e.g. momentum) may be hardcoded here
-        return torch.optim.<optim_name>(...)
+        return torch.optim.SGD(self.model.parameters(), lr=self.lr)
